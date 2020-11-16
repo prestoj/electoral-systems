@@ -10,7 +10,7 @@ def rank_ranked_pairs(comparisons):
 
     group = 0
     while True:
-        winners = VotingMethods.single_ranked_pairs(copy.deepcopy(comparisons))
+        winners = single_ranked_pairs(copy.deepcopy(comparisons))
         if len(winners) > 1:
             winners_sum = []
             for winner in winners:
@@ -135,58 +135,70 @@ def rank_instant_runoff(ballots, total_votes):
     for ballot in ballots:
         ballots_.append((ballot.split('-')[:-1], ballots[ballot]))
 
+    n_candidates = len(ballots_[0][0])
     ranked = []
     groups = [] # used to identify ties
     group = 0
-    votes = {}
-    while len(ballots_[0][0]) > 0:
-        for ballot_ in ballots_:
-            if ballot_[0][0] in votes.keys():
-                votes[ballot_[0][0]] += ballot_[1]
-            else:
-                votes[ballot_[0][0]] = ballot_[1]
 
-        curRank = []
-        for option in votes:
-            if votes[option] > (total_votes / 2):
-                curRank.append(option)
-                break
-            elif votes[option] == (total_votes / 2):
-                curRank.append(option)
+    while len(ranked) != n_candidates:
+        ballots_ = []
+        for ballot in ballots:
+            ballot_ = (ballot.split('-')[:-1], ballots[ballot])
+            for candidate in ranked:
+                ballot_[0].remove(candidate)
+            ballots_.append(ballot_)
 
-        remove = []
-        if len(curRank) > 0:
-            for option in curRank:
-                ranked.append(option)
-                groups.append(group)
+        while len(ballots_[0][0]) > 0:
 
-                remove.append(option)
+            votes = {}
+            for ballot_ in ballots_:
+                if ballot_[0][0] in votes.keys():
+                    votes[ballot_[0][0]] += ballot_[1]
+                else:
+                    votes[ballot_[0][0]] = ballot_[1]
 
-        else:
-            least_options = []
-            least_amount = 0
+            curRank = []
             for option in votes:
-                if votes[option] < least_amount:
-                    least_amount = votes[option]
-                    least_options = [option]
-                elif votes[option] == least_amount:
-                    least_options.append(option)
+                if votes[option] > (total_votes / 2):
+                    curRank.append(option)
+                    break
+                elif votes[option] == (total_votes / 2):
+                    curRank.append(option)
 
-            remove = least_options
-
-            if len(remove) == len(votes):
+            remove = []
+            if len(curRank) > 0:
                 for option in curRank:
                     ranked.append(option)
                     groups.append(group)
+                    remove.append(option)
+            else:
+                least_options = []
+                least_amount = 0
+                for i_option, option in enumerate(votes):
+                    if i_option == 0:
+                        least_amount = votes[option]
+                        least_options = [option]
 
-        for i_ballot_, ballot_ in enumerate(ballots_):
-            new_ballot_ = []
-            for i in range(len(ballot_[0])):
-                if ballot_[0][i] not in remove:
-                    new_ballot_.append(ballot_[0][i])
-            ballots_[i_ballot_] = (new_ballot_, ballot_[1])
+                    if votes[option] < least_amount:
+                        least_amount = votes[option]
+                        least_options = [option]
+                    elif votes[option] == least_amount:
+                        least_options.append(option)
 
-        group -= 1
-        votes = {}
+                remove = least_options
+
+                if len(remove) == len(votes):
+                    for option in curRank:
+                        ranked.append(option)
+                        groups.append(group)
+
+            for i_ballot_, ballot_ in enumerate(ballots_):
+                new_ballot_ = []
+                for i in range(len(ballot_[0])):
+                    if ballot_[0][i] not in remove:
+                        new_ballot_.append(ballot_[0][i])
+                ballots_[i_ballot_] = (new_ballot_, ballot_[1])
+
+            group -= 1
 
     return ranked, groups
