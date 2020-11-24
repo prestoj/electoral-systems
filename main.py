@@ -129,7 +129,7 @@ def get_winners(df_population, df_candidates, electoral_system):
     if electoral_system == "plurality":
         return get_winners_plurality(df_candidates)
     elif electoral_system == "instant_runoff":
-        return get_winners_instant_runoff(df_population, df_candidates)
+        return get_winners_instant_runoff(df_population, df_candidates)[0]
     elif electoral_system == "ranked_pairs":
         return get_winners_ranked_pairs(df_population, df_candidates)
     elif electoral_system == "borda":
@@ -153,7 +153,7 @@ def get_winners_instant_runoff(df_population, df_candidates):
         else:
             ballots[ballot] = 1
 
-    return vs.rank_instant_runoff(ballots, len(df_population))[0]
+    return vs.rank_instant_runoff(ballots, len(df_population))
 
 
 def get_winners_ranked_pairs(df_population, df_candidates, comparisons=None):
@@ -481,7 +481,7 @@ def plot_candidates(
             graph_fig.show()
 
 
-def plurality_pie(df_population, df_candidates):
+def plurality_vis(df_population, df_candidates):
     winners = get_winners_plurality(df_candidates)
 
     pie_plot = go.Pie(
@@ -508,7 +508,87 @@ def plurality_pie(df_population, df_candidates):
     return [pie_plot]
 
 
-def graph_network_data(df_population, df_candidates):
+def instant_runoff_vis(df_population, df_candidates):
+    winners, round_votes = get_winners_instant_runoff(df_population, df_candidates)
+
+    labels = [f'Round {round + 1}: {can}' for round in range(len(CANDIDATES)) for can in CANDIDATES]
+    sources, targets, values = [], [], []
+    link_colors = []
+    for i_round, round_votes_ in enumerate(round_votes):
+        if i_round == 0:
+            continue
+        loser = winners[len(winners) - i_round]
+        for candidate in sorted(round_votes_.keys()):
+            # if candidate in CANDIDATES[:4] and loser in CANDIDATES[:4]:
+            sources.append((i_round - 1) * len(CANDIDATES) + CANDIDATES.index(candidate))
+            targets.append(i_round * len(CANDIDATES) + CANDIDATES.index(candidate))
+            values.append(round_votes[i_round - 1][candidate])
+            link_colors.append(COLORS[CANDIDATES.index(candidate)].replace('rgb', 'rgba').replace(')', ', 0.33)'))
+
+            if round_votes_[candidate] - round_votes[i_round - 1][candidate] > 0:
+                sources.append((i_round - 1) * len(CANDIDATES) + CANDIDATES.index(loser))
+                targets.append(i_round * len(CANDIDATES) + CANDIDATES.index(candidate))
+                values.append(round_votes_[candidate] - round_votes[i_round - 1][candidate])
+                link_colors.append(COLORS[CANDIDATES.index(candidate)].replace('rgb', 'rgba').replace(')', ', 0.33)'))
+
+    x_start = 0
+    x_end = 1
+    y_start = 0
+    y_end = 2
+    candidate_space = []
+    for candidates_in_round in range(len(CANDIDATES), 0, -1):
+        d_y = (y_end - y_start) / (candidates_in_round + 1)
+        y_ = y_start
+        for _ in range(candidates_in_round):
+            y_ += d_y
+            candidate_space.append(y_)
+
+
+    round_space = []
+    d_x = (x_end - x_start) / (len(CANDIDATES) + 1)
+    x_ = x_start
+    for candidates_in_round in range(len(CANDIDATES), 0, -1):
+        x_ += d_x
+        for _ in range(candidates_in_round):
+            round_space.append(x_)
+
+
+    x, y = round_space, candidate_space
+    sankey_plot = go.Sankey(
+        domain=dict(
+            x=[0, 1],
+            y=[1/3, 2/3],
+        ),
+        ids=labels,
+        node=dict(
+            x=x,
+            y=y,
+            pad=0,
+            thickness=48,
+            line=dict(
+                color="rgb(17, 17, 17)",
+                width=0
+            ),
+            # label=labels,
+            label=CANDIDATES * 8,
+            color=COLORS * 8,
+        ),
+        link=dict(
+            source=sources,
+            target=targets,
+            value=values,
+            color=link_colors,
+        ),
+        textfont=dict(
+            size=24,
+            color='white',
+        ),
+    )
+
+    return [sankey_plot]
+
+
+def ranked_pairs_vis(df_population, df_candidates):
     data = []
 
     candidate_coords = {
@@ -622,44 +702,41 @@ def candidate_random_movement(
         plot_bgcolor='rgba(0,0,0,0)'
     )
 
-    if electoral_system == "plurality" or electoral_system == "ranked_pairs":
-        electoral_system_fig_dict = {
-            "data": [],
-            "layout": {},
-            "frames": []
-        }
-        electoral_system_fig_dict["layout"] = go.Layout(
-            template='plotly_dark',
-            width=1080,
-            height=1080,
-            xaxis=dict(
-                range=(-3, 3),
-                showgrid=False,
-                showticklabels=False,
-                zeroline=False,
-            ),
-            yaxis=dict(
-                range=(-3, 3),
-                showgrid=False,
-                showticklabels=False,
-                zeroline=False,
-            ),
-            showlegend=False,
-            updatemenus=[dict(
-                type="buttons",
-                buttons=[dict(
-                    label="Play",
-                    method="animate",
-                    args=[None, {"frame": {"duration": 1000 / fps}}]
-                )],
-                visible=not save
+    electoral_system_fig_dict = {
+        "data": [],
+        "layout": {},
+        "frames": []
+    }
+    electoral_system_fig_dict["layout"] = go.Layout(
+        template='plotly_dark',
+        width=1080,
+        height=1080,
+        xaxis=dict(
+            range=(-3, 3),
+            showgrid=False,
+            showticklabels=False,
+            zeroline=False,
+        ),
+        yaxis=dict(
+            range=(-3, 3),
+            showgrid=False,
+            showticklabels=False,
+            zeroline=False,
+        ),
+        showlegend=False,
+        updatemenus=[dict(
+            type="buttons",
+            buttons=[dict(
+                label="Play",
+                method="animate",
+                args=[None, {"frame": {"duration": 1000 / fps}}]
             )],
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)'
-        )
+            visible=not save
+        )],
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
 
-
-    x_zeroline, y_zeroline = get_x_zeroline(), get_y_zeroline()
 
     i_image = 0
     for i_sample in tqdm(range(n_samples)):
@@ -709,27 +786,23 @@ def candidate_random_movement(
                 )
             )
 
-            # data = [population_plot, candidates_plot, x_zeroline, y_zeroline]
             data = [population_plot, candidates_plot]
 
             if electoral_system == "plurality":
-                electoral_system_data = plurality_pie(df_population, df_candidates)
+                electoral_system_data = plurality_vis(df_population, df_candidates)
+            elif electoral_system == "instant_runoff":
+                electoral_system_data = instant_runoff_vis(df_population, df_candidates)
             elif electoral_system == "ranked_pairs":
-                electoral_system_data = graph_network_data(df_population, df_candidates)
+                electoral_system_data = ranked_pairs_vis(df_population, df_candidates)
 
             if save:
                 fig_dict["data"] = data
                 fig = go.Figure(fig_dict)
                 fig.write_image(f"../charts/random_movement/{electoral_system}/{i_image}.png")
-                if electoral_system == "plurality" or electoral_system == "ranked_pairs":
-                    electoral_system_fig_dict["data"] = electoral_system_data
-                    electoral_system_fig = go.Figure(electoral_system_fig_dict)
-                    electoral_system_fig.write_image(f"../charts/random_movement/electoral_system_visualizations/{electoral_system}/{i_image}.png")
-                # elif electoral_system == "ranked_pairs":
-                #     electoral_system_fig_dict["data"] = electoral_system_data
-                #     electoral_system_fig = go.Figure(electoral_system_fig_dict)
-                #     electoral_system_fig.write_image(f"../charts/random_movement/electoral_system_visualizations/{}/{i_image}.png")
 
+                electoral_system_fig_dict["data"] = electoral_system_data
+                electoral_system_fig = go.Figure(electoral_system_fig_dict)
+                electoral_system_fig.write_image(f"../charts/random_movement/electoral_system_visualizations/{electoral_system}/{i_image}.png")
             else:
                 fig_dict["frames"].append({
                     "data": data
@@ -737,12 +810,11 @@ def candidate_random_movement(
                 if len(fig_dict["data"]) == 0:
                     fig_dict["data"] = data
 
-                if electoral_system == "plurality" or electoral_system == "ranked_pairs":
-                    electoral_system_fig_dict["frames"].append({
-                        "data": electoral_system_data
-                    })
-                    if len(electoral_system_fig_dict["data"]) == 0:
-                        electoral_system_fig_dict["data"] = electoral_system_data
+                electoral_system_fig_dict["frames"].append({
+                    "data": electoral_system_data
+                })
+                if len(electoral_system_fig_dict["data"]) == 0:
+                    electoral_system_fig_dict["data"] = electoral_system_data
 
             i_image += 1
 
@@ -753,13 +825,13 @@ def candidate_random_movement(
             plot_bgcolor='rgba(17, 17, 17, 1)'
         ))
         fig.show()
-        if electoral_system == "plurality" or electoral_system == "ranked_pairs":
-            electoral_system_fig = go.Figure(electoral_system_fig_dict)
-            electoral_system_fig.update_layout(dict(
-                paper_bgcolor='rgba(17, 17, 17, 1)',
-                plot_bgcolor='rgba(17, 17, 17, 1)'
-            ))
-            electoral_system_fig.show()
+
+        electoral_system_fig = go.Figure(electoral_system_fig_dict)
+        electoral_system_fig.update_layout(dict(
+            paper_bgcolor='rgba(17, 17, 17, 1)',
+            plot_bgcolor='rgba(17, 17, 17, 1)'
+        ))
+        electoral_system_fig.show()
 
 
 def partisan_random_movement(
@@ -931,7 +1003,7 @@ def partisan_random_movement(
             data = [left_candidates_plot, right_candidates_plot, left_population_plot, right_population_plot, x_zeroline, y_zeroline]
 
             if electoral_system == "ranked_pairs":
-                graph_data = graph_network_data(df_population)
+                graph_data = ranked_pairs_vis(df_population)
 
             if save:
                 fig_dict["data"] = data
@@ -1419,10 +1491,10 @@ def plot_winner_space_transition(
 
 
 if __name__ == '__main__':
-    save = 1
-    n_samples = 10
+    save = 0
+    n_samples = 10 if save else 1
     n_seconds_between_locs = 5 if save else 1
-    fps = 5 if save else 30
+    fps = 5 if save else 1
 
     population_dim_1_values = np.random.normal(0, 1, N_POPULATION)
     population_dim_2_values = np.random.normal(0, 1, N_POPULATION)
@@ -1453,8 +1525,7 @@ if __name__ == '__main__':
     # electoral_system = "plurality"
     # electoral_system = "instant_runoff"
     # electoral_system = "ranked_pairs"
-    # for electoral_system in ["plurality", "instant_runoff", "ranked_pairs"]:
-    for electoral_system in ["plurality"]:
+    for electoral_system in ["plurality", "instant_runoff", "ranked_pairs"]:
         # generate_winners(
         #     electoral_system,
         #     population_dim_1_values,

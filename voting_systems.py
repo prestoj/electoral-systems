@@ -1,5 +1,6 @@
 from graph import Graph
 import copy
+import numpy as np
 
 def rank_ranked_pairs(comparisons):
     """
@@ -137,68 +138,35 @@ def rank_instant_runoff(ballots, total_votes):
 
     n_candidates = len(ballots_[0][0])
     ranked = []
-    groups = [] # used to identify ties
-    group = 0
+    round_votes = []
 
-    while len(ranked) != n_candidates:
-        ballots_ = []
-        for ballot in ballots:
-            ballot_ = (ballot.split('-')[:-1], ballots[ballot])
-            for candidate in ranked:
-                ballot_[0].remove(candidate)
-            ballots_.append(ballot_)
+    ballots_ = []
+    for ballot in ballots:
+        ballot_ = (ballot.split('-')[:-1], ballots[ballot])
+        for candidate in ranked:
+            ballot_[0].remove(candidate)
+        ballots_.append(ballot_)
 
-        while len(ballots_[0][0]) > 0:
+    while len(ballots_[0][0]) > 0:
 
-            votes = {}
-            for ballot_ in ballots_:
-                if ballot_[0][0] in votes.keys():
-                    votes[ballot_[0][0]] += ballot_[1]
-                else:
-                    votes[ballot_[0][0]] = ballot_[1]
-
-            curRank = []
-            for option in votes:
-                if votes[option] > (total_votes / 2):
-                    curRank.append(option)
-                    break
-                elif votes[option] == (total_votes / 2):
-                    curRank.append(option)
-
-            remove = []
-            if len(curRank) > 0:
-                for option in curRank:
-                    ranked.append(option)
-                    groups.append(group)
-                    remove.append(option)
+        votes = {}
+        for ballot_ in ballots_:
+            if ballot_[0][0] in votes.keys():
+                votes[ballot_[0][0]] += ballot_[1]
             else:
-                least_options = []
-                least_amount = 0
-                for i_option, option in enumerate(votes):
-                    if i_option == 0:
-                        least_amount = votes[option]
-                        least_options = [option]
+                votes[ballot_[0][0]] = ballot_[1]
 
-                    if votes[option] < least_amount:
-                        least_amount = votes[option]
-                        least_options = [option]
-                    elif votes[option] == least_amount:
-                        least_options.append(option)
+        round_votes.append(votes)
 
-                remove = least_options
+        least_candidate = list(votes.keys())[np.argmin(list(votes.values()))]
+        remove = [least_candidate]
+        ranked.append(least_candidate)
 
-                if len(remove) == len(votes):
-                    for option in curRank:
-                        ranked.append(option)
-                        groups.append(group)
+        for i_ballot_, ballot_ in enumerate(ballots_):
+            new_ballot_ = []
+            for i in range(len(ballot_[0])):
+                if ballot_[0][i] not in remove:
+                    new_ballot_.append(ballot_[0][i])
+            ballots_[i_ballot_] = (new_ballot_, ballot_[1])
 
-            for i_ballot_, ballot_ in enumerate(ballots_):
-                new_ballot_ = []
-                for i in range(len(ballot_[0])):
-                    if ballot_[0][i] not in remove:
-                        new_ballot_.append(ballot_[0][i])
-                ballots_[i_ballot_] = (new_ballot_, ballot_[1])
-
-            group -= 1
-
-    return ranked, groups
+    return ranked[::-1], round_votes
