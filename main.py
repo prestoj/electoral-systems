@@ -472,13 +472,132 @@ def plot_candidates(
             plot_bgcolor='rgba(17, 17, 17, 1)'
         ))
         fig.show()
-        if electoral_system == "ranked_pairs":
-            graph_fig = go.Figure(graph_fig_dict)
-            graph_fig.update_layout(dict(
-                paper_bgcolor='rgba(17, 17, 17, 1)',
-                plot_bgcolor='rgba(17, 17, 17, 1)'
+
+
+def plot_candidate_distance(
+    candidates_dim_1_values,
+    candidates_dim_2_values,
+    n_locs,
+    n_seconds_between_locs,
+    fps,
+    save
+):
+    fig_dict = {
+        'layout': {},
+        'data': [],
+        'frames': []
+    }
+    fig_dict['layout'] = dict(
+        template='plotly_dark',
+        width=1080,
+        height=1080,
+        xaxis=dict(
+            range=(-5, 5),
+            showgrid=False,
+            showticklabels=False,
+            zeroline=False,
+        ),
+        yaxis=dict(
+            range=(-5, 5),
+            showgrid=False,
+            showticklabels=False,
+            zeroline=False,
+        ),
+        showlegend=False,
+        updatemenus=[dict(
+            type="buttons",
+            buttons=[dict(
+                label="Play",
+                method="animate",
+                args=[None, {"frame": {"duration": 1000 / fps}}]
+            )],
+            visible=not save
+        )],
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+
+    pop_pos_x = np.random.uniform(-3, 3, n_locs)
+    pop_pos_y = np.random.uniform(-3, 3, n_locs)
+
+    i_image = 0
+    for i_sample in range(n_locs - 1):
+        init_x = pop_pos_x[i_sample]
+        init_y = pop_pos_y[i_sample]
+        final_x = pop_pos_x[i_sample + 1]
+        final_y = pop_pos_y[i_sample + 1]
+        for fraction in tqdm(np.arange(0, 1, 1 / (fps * n_seconds_between_locs))):
+            x_ = (1 - fraction) * init_x + fraction * final_x
+            y_ = (1 - fraction) * init_y + fraction * final_y
+            data = []
+            for i_can in range(len(CANDIDATES)):
+                x = [x_, candidates_dim_1_values[0, i_can], None]
+                y = [y_, candidates_dim_2_values[0, i_can], None]
+                data.append(go.Scatter(
+                    x=x,
+                    y=y,
+                    mode='lines',
+                    line=dict(
+                        color=COLORS[i_can],
+                        width=10
+                    )
+                ))
+                data.append(go.Scatter(
+                    x=[x[1]],
+                    y=[y[1]],
+                    textfont_size=24,
+                    text=CANDIDATES[i_can],
+                    textposition='top center',
+                    mode='markers+text',
+                    marker=dict(
+                        color=COLORS[i_can],
+                        size=50,
+                        opacity=1,
+                        line={
+                            'width': 2,
+                            'color': 'rgb(17, 17, 17)',
+                        }
+                    )
+                ))
+
+            data.append(go.Scatter(
+                x=[x_],
+                y=[y_],
+                textfont_size=24,
+                text='Voter',
+                textposition='top center',
+                mode='markers+text',
+                marker=dict(
+                    color='white',
+                    size=50,
+                    opacity=1,
+                    line={
+                        'width': 2,
+                        'color': 'rgb(17, 17, 17)',
+                    }
+                )
             ))
-            graph_fig.show()
+            if save:
+                fig_dict["data"] = data
+                fig = go.Figure(fig_dict)
+                fig.write_image(f"../charts/candidate_distance/{i_image}.png")
+
+            else:
+                fig_dict["frames"].append({
+                    "data": data
+                })
+                if len(fig_dict["data"]) == 0:
+                    fig_dict["data"] = data
+
+            i_image += 1
+
+    if not save:
+        fig = go.Figure(fig_dict)
+        fig.update_layout(dict(
+            paper_bgcolor='rgba(17, 17, 17, 1)',
+            plot_bgcolor='rgba(17, 17, 17, 1)'
+        ))
+        fig.show()
 
 
 def plurality_vis(df_population, df_candidates):
@@ -490,17 +609,17 @@ def plurality_vis(df_population, df_candidates):
         textinfo='label',
         textfont=dict(
             color="white",
-            size=48,
+            size=56,
         ),
         textposition='inside',
         marker=dict(
-            colors=COLORS,
+            colors=[COLORS[CANDIDATES.index(candidate)] for candidate in df_candidates.index],
             line=dict(
                 color='rgb(17, 17, 17)',
                 width=2,
             )
         ),
-        pull=[1/10 if winners[0] == candidate else 0 for candidate in CANDIDATES],
+        pull=[1/10 if winners[0] == candidate and len(df_candidates.index) > 1 else 0 for candidate in df_candidates.index],
         direction='clockwise',
         sort=False,
     )
@@ -523,13 +642,13 @@ def instant_runoff_vis(df_population, df_candidates):
             sources.append((i_round - 1) * len(CANDIDATES) + CANDIDATES.index(candidate))
             targets.append(i_round * len(CANDIDATES) + CANDIDATES.index(candidate))
             values.append(round_votes[i_round - 1][candidate])
-            link_colors.append(COLORS[CANDIDATES.index(candidate)].replace('rgb', 'rgba').replace(')', ', 0.33)'))
+            link_colors.append(COLORS[CANDIDATES.index(candidate)].replace('rgb', 'rgba').replace(')', ', 0.75)'))
 
             if round_votes_[candidate] - round_votes[i_round - 1][candidate] > 0:
                 sources.append((i_round - 1) * len(CANDIDATES) + CANDIDATES.index(loser))
                 targets.append(i_round * len(CANDIDATES) + CANDIDATES.index(candidate))
                 values.append(round_votes_[candidate] - round_votes[i_round - 1][candidate])
-                link_colors.append(COLORS[CANDIDATES.index(candidate)].replace('rgb', 'rgba').replace(')', ', 0.33)'))
+                link_colors.append(COLORS[CANDIDATES.index(loser)].replace('rgb', 'rgba').replace(')', ', 0.75)'))
 
     x_start = 0
     x_end = 1
@@ -556,21 +675,22 @@ def instant_runoff_vis(df_population, df_candidates):
     x, y = round_space, candidate_space
     sankey_plot = go.Sankey(
         domain=dict(
-            x=[0, 1],
-            y=[1/3, 2/3],
+            x=(0, 1),
+            y=(1/2, 1),
         ),
+        orientation='h',
         ids=labels,
         node=dict(
             x=x,
             y=y,
             pad=0,
-            thickness=48,
+            thickness=24,
             line=dict(
                 color="rgb(17, 17, 17)",
-                width=0
+                width=1
             ),
             # label=labels,
-            label=CANDIDATES * 8,
+            # label=CANDIDATES * 8,
             color=COLORS * 8,
         ),
         link=dict(
@@ -579,10 +699,12 @@ def instant_runoff_vis(df_population, df_candidates):
             value=values,
             color=link_colors,
         ),
-        textfont=dict(
-            size=24,
-            color='white',
-        ),
+        textfont_size=24,
+        textfont_color='red',
+        # textfont=dict(
+        #     size=24,
+        #     color='white',
+        # ),
     )
 
     return [sankey_plot]
@@ -613,38 +735,196 @@ def ranked_pairs_vis(df_population, df_candidates):
                     y=[y0, y1],
                     mode='lines',
                     line=dict(
-                        width=1 + 25 * (comparisons[can_i][can_j] - 500) / 1000,
+                        width=1 + 50 * (comparisons[can_i][can_j] - 500) / 1000,
                         color=COLORS[CANDIDATES.index(can_i)],
-                    )
+                    ),
+                    opacity=2/3,
                 ))
 
-    node_x = []
-    node_y = []
+    winners = get_winners_ranked_pairs(df_population, df_candidates, comparisons=comparisons)
     for candidate in candidate_coords:
         x, y = candidate_coords[candidate]
-        node_x.append(x)
-        node_y.append(y)
 
-    winners = get_winners_ranked_pairs(df_population, df_candidates, comparisons=comparisons)
-
-    data.append(go.Scatter(
-        x=node_x,
-        y=node_y,
-        textfont_size=24,
-        text=CANDIDATES,
-        mode='markers+text',
-        marker_symbol=['star' if candidate == winners[0] else 'circle' for candidate in CANDIDATES],
-        marker=dict(
-            size=100,
-            color=COLORS,
-            line={
-                'width': 5,
-                'color': 'rgb(17, 17, 17)',
-            }
-        )
-    ))
+        data.append(go.Scatter(
+            x=[x],
+            y=[y],
+            mode='markers',
+            marker_symbol='star' if candidate == winners[0] else 'circle',
+            marker=dict(
+                size=100,
+                color=COLORS[CANDIDATES.index(candidate)],
+                line={
+                    'width': 5,
+                    'color': 'rgb(17, 17, 17)',
+                }
+            )
+        ))
 
     return data
+
+
+def instant_runoff_pop_vis(
+    population_dim_1_values,
+    population_dim_2_values,
+    candidates_dim_1_values,
+    candidates_dim_2_values,
+    save=False
+):
+    for i_election in range(candidates_dim_1_values.shape[0]):
+        df_population, df_candidates = initialize_dfs(
+            candidates_dim_1_values[i_election],
+            candidates_dim_2_values[i_election],
+            population_dim_1_values,
+            population_dim_2_values
+        )
+
+        ranked_candidates = get_winners_plurality(df_candidates)
+
+        fig_dict = {
+            "data": [],
+            "layout": {},
+        }
+
+        fig_dict["layout"] = go.Layout(
+            template='plotly_dark',
+            width=1080,
+            height=1080,
+            xaxis=dict(
+                range=(-5, 5),
+                showgrid=False,
+                showticklabels=False,
+                zeroline=False,
+            ),
+            yaxis=dict(
+                range=(-5, 5),
+                showgrid=False,
+                showticklabels=False,
+                zeroline=False,
+            ),
+            showlegend=False,
+            updatemenus=[dict(
+                type="buttons",
+                buttons=[dict(
+                    label="Play",
+                    method="animate",
+                    args=[None, {"frame": {"duration": 1000 / fps}}]
+                )],
+                visible=not save
+            )],
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)'
+        )
+
+        electoral_system_fig_dict = {
+            "data": [],
+            "layout": {},
+        }
+        electoral_system_fig_dict["layout"] = go.Layout(
+            template='plotly_dark',
+            width=1080,
+            height=1080,
+            xaxis=dict(
+                range=(-3, 3),
+                showgrid=False,
+                showticklabels=False,
+                zeroline=False,
+            ),
+            yaxis=dict(
+                range=(-3, 3),
+                showgrid=False,
+                showticklabels=False,
+                zeroline=False,
+            ),
+            showlegend=False,
+            updatemenus=[dict(
+                type="buttons",
+                buttons=[dict(
+                    label="Play",
+                    method="animate",
+                    args=[None, {"frame": {"duration": 1000 / fps}}]
+                )],
+                visible=not save
+            )],
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)'
+        )
+
+        for i_round in range(8):
+            candidates_plot = go.Scatter(
+                x=df_candidates['dim_1'],
+                y=df_candidates['dim_2'],
+                textfont_size=24,
+                text=[candidate for candidate in CANDIDATES if candidate in ranked_candidates],
+                textposition='top center',
+                mode='markers+text',
+                marker_symbol=['star' if candidate == ranked_candidates[0] else 'circle' for candidate in CANDIDATES if candidate in ranked_candidates],
+                marker=dict(
+                    size=50,
+                    color=[COLORS[CANDIDATES.index(candidate)] for candidate in CANDIDATES if candidate in ranked_candidates],
+                    opacity=1,
+                    line={
+                        'width': 2,
+                        'color': 'rgb(17, 17, 17)',
+                    }
+                )
+            )
+
+            population_plot = go.Scatter(
+                x=df_population['dim_1'],
+                y=df_population['dim_2'],
+                mode='markers',
+                marker=dict(
+                    size=10,
+                    color=[COLORS[CANDIDATES.index(df_population['choice_1'].iloc[i_pop])] for i_pop in range(N_POPULATION)],
+                    opacity=1/3
+                )
+            )
+
+            data = [population_plot, candidates_plot]
+            electoral_system_data = plurality_vis(df_population, df_candidates)
+
+            fig_dict["data"] = data
+            electoral_system_fig_dict["data"] = electoral_system_data
+
+            if save:
+                fig = go.Figure(fig_dict)
+                electoral_system_fig = go.Figure(electoral_system_fig_dict)
+                fig.write_image(f"../charts/instant_runoff_pop_vis/pop/{i_election}_{i_round}.png")
+                electoral_system_fig.write_image(f"../charts/instant_runoff_pop_vis/pie/{i_election}_{i_round}.png")
+
+            df_candidates.drop([ranked_candidates[-1]], inplace=True)
+
+            population_dims = np.array([df_population['dim_1'], df_population['dim_2']]).T.reshape(N_POPULATION, 1, 2)
+            candidate_dims = np.array([df_candidates['dim_1'], df_candidates['dim_2']]).T.reshape(1, len(df_candidates.index), 2)
+            euclidean_distances = np.sqrt(np.sum(np.power((population_dims - candidate_dims), 2), axis=2))
+            rankings = np.argsort(euclidean_distances)
+
+            for i_pop in range(N_POPULATION):
+                for i_candidate in range(len(df_candidates.index)):
+                    df_population['choice_' + str(i_candidate + 1)].iloc[i_pop] = df_candidates.index[rankings[i_pop, i_candidate]]
+                    df_population['distance_' + str(i_candidate + 1)].iloc[i_pop] = euclidean_distances[i_pop, rankings[i_pop, i_candidate]]
+
+            for i_candidate in range(len(df_candidates.index)):
+                df_candidates['mean_distance'].iloc[i_candidate] = euclidean_distances[:, i_candidate].mean()
+                for i_choice in range(len(df_candidates.index)):
+                    df_candidates['choice_' + str(i_choice + 1)].iloc[i_candidate] = np.sum(rankings[:, i_choice] == i_candidate)
+
+            ranked_candidates = get_winners_plurality(df_candidates)
+
+        if not save:
+            fig = go.Figure(fig_dict)
+            fig.update_layout(dict(
+                paper_bgcolor='rgba(17, 17, 17, 1)',
+                plot_bgcolor='rgba(17, 17, 17, 1)'
+            ))
+            fig.show()
+
+            electoral_system_fig = go.Figure(electoral_system_fig_dict)
+            electoral_system_fig.update_layout(dict(
+                paper_bgcolor='rgba(17, 17, 17, 1)',
+                plot_bgcolor='rgba(17, 17, 17, 1)'
+            ))
+            electoral_system_fig.show()
 
 
 def candidate_random_movement(
@@ -1490,16 +1770,190 @@ def plot_winner_space_transition(
         fig.show()
 
 
+def find_condorcet_paradox(
+    population_dim_1_values,
+    population_dim_2_values,
+    save=False
+):
+    """
+    listen, i know this is *incredibly* inefficient and very dirty.
+
+    i do not care.
+    """
+    fig_dict = {
+        "data": [],
+        "layout": {},
+    }
+
+    fig_dict["layout"] = go.Layout(
+        template='plotly_dark',
+        width=1080,
+        height=1080,
+        xaxis=dict(
+            range=(-5, 5),
+            showgrid=False,
+            showticklabels=False,
+            zeroline=False,
+        ),
+        yaxis=dict(
+            range=(-5, 5),
+            showgrid=False,
+            showticklabels=False,
+            zeroline=False,
+        ),
+        showlegend=False,
+        updatemenus=[dict(
+            type="buttons",
+            buttons=[dict(
+                label="Play",
+                method="animate",
+                args=[None, {"frame": {"duration": 1000 / fps}}]
+            )],
+            visible=not save
+        )],
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+
+    candidate_dim_1_values = np.random.normal(0, 1, 3)
+    candidate_dim_2_values = np.random.normal(0, 1, 3)
+
+    df_population  = pd.DataFrame({
+        'dim_1': population_dim_1_values,
+        'dim_2': population_dim_2_values,
+    })
+
+    df_candidates  = pd.DataFrame({
+        'dim_1': candidate_dim_1_values,
+        'dim_2': candidate_dim_2_values,
+        'mean_distance': -1,
+    }, index=CANDIDATES[:3])
+
+    for i_candidate, candidate in enumerate(CANDIDATES[:3]):
+        df_population['choice_' + str(i_candidate + 1)] = 0
+        df_population['distance_' + str(i_candidate + 1)] = 0
+        df_candidates['choice_' + str(i_candidate + 1)] = 0
+
+    i_try = 0
+    while True:
+        i_try += 1
+        df_candidates["dim_1"] = np.random.normal(0, 1, 3)
+        df_candidates["dim_2"] = np.random.normal(0, 1, 3)
+        if i_try < 22500:
+            continue
+        print(i_try)
+
+        population_dims = np.array([df_population['dim_1'], df_population['dim_2']]).T.reshape(N_POPULATION, 1, 2)
+        candidate_dims = np.array([df_candidates['dim_1'], df_candidates['dim_2']]).T.reshape(1, len(CANDIDATES[:3]), 2)
+        euclidean_distances = np.sqrt(np.sum(np.power((population_dims - candidate_dims), 2), axis=2))
+        rankings = np.argsort(euclidean_distances)
+
+        for i_pop in range(N_POPULATION):
+            for i_candidate, candidate in enumerate(CANDIDATES[:3]):
+                df_population['choice_' + str(i_candidate + 1)].iloc[i_pop] = CANDIDATES[rankings[i_pop, i_candidate]]
+                df_population['distance_' + str(i_candidate + 1)].iloc[i_pop] = euclidean_distances[i_pop, rankings[i_pop, i_candidate]]
+
+        for i_candidate in range(len(CANDIDATES[:3])):
+            df_candidates['mean_distance'].iloc[i_candidate] = euclidean_distances[:, i_candidate].mean()
+            for i_choice in range(len(CANDIDATES[:3])):
+                df_candidates['choice_' + str(i_choice + 1)].iloc[i_candidate] = np.sum(rankings[:, i_choice] == i_candidate)
+
+        comparisons = {}
+        for candidate_i in df_candidates.index:
+            comparisons[candidate_i] = {}
+            for candidate_j in df_candidates.index:
+                comparisons[candidate_i][candidate_j] = 0
+
+        for i_pop in range(len(df_population)):
+            ballot_candidates = df_population.iloc[i_pop][['choice_' + str(i_choice + 1) for i_choice in range(len(df_candidates))]].to_list()
+            for i, candidate_i in enumerate(ballot_candidates[:-1]):
+                for j, candidate_j in enumerate(ballot_candidates[i + 1:]):
+                    comparisons[candidate_i][candidate_j] += 1
+
+        winners, _, has_inconsistency = vs.rank_ranked_pairs(comparisons)
+
+        if has_inconsistency or True:
+            print(f"HOLY SHIT IT ONLY TOOK {i_try} TRIES!")
+            comparisons = {}
+            for candidate_i in df_candidates.index:
+                comparisons[candidate_i] = {}
+                for candidate_j in df_candidates.index:
+                    comparisons[candidate_i][candidate_j] = 0
+
+            for i_pop in range(len(df_population)):
+                ballot_candidates = df_population.iloc[i_pop][['choice_' + str(i_choice + 1) for i_choice in range(len(df_candidates))]].to_list()
+                for i, candidate_i in enumerate(ballot_candidates[:-1]):
+                    for j, candidate_j in enumerate(ballot_candidates[i + 1:]):
+                        comparisons[candidate_i][candidate_j] += 1
+            print(comparisons)
+            print(np.sqrt(np.sum(candidate_dims ** 2, axis=2)))
+            print(candidate_dims)
+
+            candidates_plot = go.Scatter(
+                x=df_candidates['dim_1'],
+                y=df_candidates['dim_2'],
+                textfont_size=24,
+                text=CANDIDATES,
+                textposition='top center',
+                mode='markers+text',
+                marker_symbol=['star' if candidate == winners[0] else 'circle' for candidate in CANDIDATES[:3]],
+                marker=dict(
+                    # size=[50 - (winners.index(candidate) * 5) for candidate in CANDIDATES],
+                    size=50,
+                    color=COLORS,
+                    opacity=1,
+                    line={
+                        'width': 2,
+                        'color': 'rgb(17, 17, 17)',
+                    }
+                )
+            )
+
+            population_plot = go.Scatter(
+                x=df_population['dim_1'],
+                y=df_population['dim_2'],
+                mode='markers',
+                marker=dict(
+                    size=10,
+                    color=[COLORS[CANDIDATES.index(df_population['choice_1'].iloc[i_pop])] for i_pop in range(N_POPULATION)],
+                    opacity=1/3
+                )
+            )
+
+            data = [population_plot, candidates_plot]
+
+            fig_dict["data"] = data
+            fig = go.Figure(fig_dict)
+            if save:
+                fig.write_image(f"../charts/condorcet_paradoxes/{i_try}.png")
+
+            fig.show()
+
+
 if __name__ == '__main__':
-    save = 0
+    save = 1
     n_samples = 10 if save else 1
     n_seconds_between_locs = 5 if save else 1
-    fps = 5 if save else 1
+    fps = 30 if save else 1
 
     population_dim_1_values = np.random.normal(0, 1, N_POPULATION)
     population_dim_2_values = np.random.normal(0, 1, N_POPULATION)
     candidates_dim_1_values = np.random.normal(0, 1, (n_samples, len(CANDIDATES)))
     candidates_dim_2_values = np.random.normal(0, 1, (n_samples, len(CANDIDATES)))
+
+    instant_runoff_pop_vis(
+        population_dim_1_values,
+        population_dim_2_values,
+        candidates_dim_1_values,
+        candidates_dim_2_values,
+        save
+    )
+
+    # find_condorcet_paradox(
+    #     population_dim_1_values,
+    #     population_dim_2_values,
+    #     save
+    # )
 
     # plot_population(
     #     population_dim_1_values,
@@ -1516,6 +1970,15 @@ if __name__ == '__main__':
     #     save
     # )
 
+    # plot_candidate_distance(
+    #     candidates_dim_1_values,
+    #     candidates_dim_2_values,
+    #     n_samples,
+    #     n_seconds_between_locs,
+    #     fps,
+    #     save
+    # )
+
     # plot_axes_and_population(
     #     population_dim_1_values,
     #     population_dim_2_values,
@@ -1525,7 +1988,7 @@ if __name__ == '__main__':
     # electoral_system = "plurality"
     # electoral_system = "instant_runoff"
     # electoral_system = "ranked_pairs"
-    for electoral_system in ["plurality", "instant_runoff", "ranked_pairs"]:
+    # for electoral_system in ["plurality", "instant_runoff", "ranked_pairs"]:
         # generate_winners(
         #     electoral_system,
         #     population_dim_1_values,
@@ -1550,17 +2013,17 @@ if __name__ == '__main__':
         #     electoral_system,
         #     save
         # )
-        candidate_random_movement(
-            electoral_system,
-            population_dim_1_values,
-            population_dim_2_values,
-            candidates_dim_1_values,
-            candidates_dim_2_values,
-            n_samples,
-            n_seconds_between_locs,
-            fps,
-            save
-        )
+        # candidate_random_movement(
+        #     electoral_system,
+        #     population_dim_1_values,
+        #     population_dim_2_values,
+        #     candidates_dim_1_values,
+        #     candidates_dim_2_values,
+        #     n_samples,
+        #     n_seconds_between_locs,
+        #     fps,
+        #     save
+        # )
         # partisan_random_movement(
         #     electoral_system,
         #     population_dim_1_values,

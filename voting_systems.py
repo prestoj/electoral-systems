@@ -10,8 +10,10 @@ def rank_ranked_pairs(comparisons):
     groups = [] # used to identify ties
 
     group = 0
+    has_inconsistency = False
     while True:
-        winners = single_ranked_pairs(copy.deepcopy(comparisons))
+        winners, has_inconsistency_ = single_ranked_pairs(copy.deepcopy(comparisons))
+        has_inconsistency = has_inconsistency_ or has_inconsistency
         if len(winners) > 1:
             winners_sum = []
             for winner in winners:
@@ -36,13 +38,14 @@ def rank_ranked_pairs(comparisons):
         if comparisons == {}:
             break
 
-    return ranked, groups
+    return ranked, groups, has_inconsistency
 
 def single_ranked_pairs(comparisons):
     """
     returns the winner(s) of the ranked pairs method
     """
     graph = Graph(comparisons.keys())
+    has_inconsistency = False
     while True:
         max_maj = 0
         can_a = ""
@@ -50,7 +53,7 @@ def single_ranked_pairs(comparisons):
 
         for can_i in comparisons:
             for can_j in comparisons:
-                if can_i != can_j and comparisons[can_i][can_j] > comparisons[can_j][can_i]:
+                if can_i != can_j and comparisons[can_i][can_j] > comparisons[can_j][can_i] and comparisons[can_i][can_j] > max_maj:
                     max_maj = comparisons[can_i][can_j]
                     can_a = can_i
                     can_b = can_j
@@ -60,12 +63,14 @@ def single_ranked_pairs(comparisons):
 
         graph.add_edge(can_a, can_b)
         if (graph.has_cycle(can_a) or graph.has_cycle(can_b)):
+            print("omg, a non-transitive ranking!")
+            has_inconsistency = True
             graph.remove_edge(can_a, can_b)
 
         comparisons[can_a][can_b] = -1
         comparisons[can_b][can_a] = -1
 
-    return graph.get_sources()
+    return graph.get_sources(), has_inconsistency
 
 def rank_borda(comparisons, total_votes):
     """
