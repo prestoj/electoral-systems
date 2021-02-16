@@ -1,0 +1,16 @@
+Accuracies (1000 elections with 8 candidates, 1000 population, bivariate normal distribution):
+Plurality - 40.9%
+Instant-Runoff Voting - 64.5%
+Approval - 66.8%
+Borda Count - 85.1%
+Score (0-5) - 85.4%
+Score (0-100) - 86.1%
+STAR (0-5) - 90.9%
+STAR (0-100) - 95.7%
+Condorcet Score (0-5) - 91.7%
+Condorcet Score (0-100) - 97.6%
+Minimax - 97.5%
+Black - 97.6%
+Ranked Pairs - 97.6%
+Condorcet Hare - 97.7%
+Schulze - 97.7%
